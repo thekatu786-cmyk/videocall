@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Video Call</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:#0f1220;color:#fff;font-family:system-ui,Arial,sans-serif}
+  .screen{display:none;min-height:100%;padding:24px;flex-direction:column;align-items:center;gap:14px;text-align:center}
+  .screen.active{display:flex}
+  .center{justify-content:center}
+  h1{font-size:26px}
+  .btn{width:100%;max-width:340px;padding:15px;border:none;border-radius:14px;font-size:17px;font-weight:600;color:#fff;cursor:pointer;background:#3b82f6}
+  .green{background:#16a34a}.purple{background:#8b5cf6}.red{background:#dc2626}.gray{background:#374151}
+  .btn:active{transform:scale(.97)}
+  input[type=text],input[type=password],input[type=search]{width:100%;max-width:340px;padding:14px;border-radius:12px;border:2px solid #374151;background:#1b2036;color:#fff;font-size:17px}
+  .status{color:#9ca3af;min-height:20px}
+  .av{width:64px;height:64px;border-radius:50%;background:#3b82f6 center/cover;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;flex-shrink:0}
+  .av.big{width:110px;height:110px;font-size:48px}
+  .list{width:100%;max-width:340px;display:flex;flex-direction:column;gap:8px}
+  .row{display:flex;align-items:center;gap:12px;background:#1b2036;padding:10px;border-radius:14px;text-align:left}
+  .row .av{width:44px;height:44px;font-size:20px}
+  .row .who{flex:1;min-width:0}
+  .row .who b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .who small{color:#9ca3af}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#6b7280;margin-right:5px}
+  .dot.on{background:#22c55e}
+  .row button{padding:9px 14px;border:none;border-radius:10px;background:#16a34a;color:#fff;font-weight:600}
+  .row button:disabled{background:#374151;color:#9ca3af}
+  .hist{font-size:14px;color:#cbd5e1;text-align:left;width:100%;max-width:340px}
+  .hist div{padding:6px 0;border-bottom:1px solid #1f2540}
+  .miss{color:#f87171}
+  /* video */
+  #s-video{padding:0;position:relative;background:#000;gap:0;justify-content:flex-start}
+  #remote{width:100%;height:100vh;object-fit:cover;background:#111}
+  #local{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;width:104px;height:140px;object-fit:cover;border-radius:12px;border:2px solid #fff;background:#222;transform:scaleX(-1)}
+  #name-tag{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);left:12px;background:rgba(0,0,0,.55);padding:6px 12px;border-radius:20px;font-size:14px}
+  #controls{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);left:0;right:0;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:0 8px}
+  .round{width:54px;height:54px;border-radius:50%;border:none;font-size:22px;color:#fff;background:#374151}
+  .round.off{background:#dc2626}
+  #chat{display:none;position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 90px);margin:0 12px;background:rgba(15,18,32,.92);border-radius:14px;padding:10px;max-height:45vh;flex-direction:column;gap:8px}
+  #chat.on{display:flex}
+  #msgs{overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-size:15px;text-align:left}
+  .m{padding:6px 10px;border-radius:12px;max-width:80%;word-break:break-word}
+  .m.me{background:#3b82f6;align-self:flex-end}.m.them{background:#374151;align-self:flex-start}
+  #chat-row{display:flex;gap:8px}
+  #chat-row input{flex:1;padding:10px;font-size:15px}
+  #chat-row button{padding:0 16px;border:none;border-radius:10px;background:#3b82f6;color:#fff}
+  /* incoming overlay */
+  #incoming{display:none;position:fixed;inset:0;z-index:50;background:rgba(10,12,24,.96);flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px}
+  #incoming.on{display:flex}
+  .pulse{animation:p 1.2s infinite}
+  @keyframes p{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}50%{box-shadow:0 0 0 24px rgba(34,197,94,0)}}
+  .acts{display:flex;gap:30px;margin-top:20px}
+  .acts button{width:72px;height:72px;border-radius:50%;border:none;font-size:30px;color:#fff}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="s-auth" class="screen center">
+  <h1>📹 Video Call</h1>
+  <input type="text" id="a-user" placeholder="Username" autocapitalize="off" autocomplete="username">
+  <input type="password" id="a-pass" placeholder="Password (min 6)" autocomplete="current-password">
+  <button class="btn" onclick="auth('login')">Login</button>
+  <button class="btn gray" onclick="auth('register')">Naya Account Banao</button>
+  <p class="status" id="auth-msg"></p>
+</div>
+
+<!-- MENU -->
+<div id="s-menu" class="screen center">
+  <div class="av big" id="me-av"></div>
+  <h1 id="me-name"></h1>
+  <button class="btn" onclick="openSearch()">CALL</button>
+  <button class="btn purple" onclick="openProfile()">Profile</button>
+  <button class="btn gray" onclick="logout()">Logout</button>
+  <p class="status">Receive: koi call karega to yahin apne aap screen par aa jayegi</p>
+</div>
+
+<!-- SEARCH -->
+<div id="s-search" class="screen">
+  <h1>Kisko Call Karna Hai?</h1>
+  <input type="search" id="q" placeholder="Username ya naam search karo" oninput="doSearch()">
+  <div class="list" id="results"></div>
+  <button class="btn gray" onclick="show('s-menu')">Back</button>
+</div>
+
+<!-- PROFILE -->
+<div id="s-profile" class="screen">
+  <h1>Profile</h1>
+  <div class="av big" id="p-av" onclick="$('p-file').click()"></div>
+  <input type="file" id="p-file" accept="image/*" hidden onchange="pickAv(event)">
+  <small class="status">Photo badalne ke liye photo par tap karo</small>
+  <p id="p-user" class="status"></p>
+  <input type="text" id="p-name" maxlength="30" placeholder="Apna naam">
+  <button class="btn purple" onclick="saveProfile()">Save</button>
+  <p class="status" id="p-msg"></p>
+  <h3>Call History</h3>
+  <div class="hist" id="hist"></div>
+  <button class="btn gray" onclick="show('s-menu')">Back</button>
+</div>
+
+<!-- CALLING -->
+<div id="s-calling" class="screen center">
+  <div class="av big pulse" id="c-av"></div>
+  <h1 id="c-name"></h1>
+  <p class="status" id="c-status">Ringing...</p>
+  <button class="btn red" onclick="hangup()">Cancel</button>
+</div>
+
+<!-- VIDEO -->
+<div id="s-video" class="screen">
+  <video id="remote" autoplay playsinline></video>
+  <video id="local" autoplay playsinline muted></video>
+  <div id="name-tag"></div>
+  <div id="chat">
+    <div id="msgs"></div>
+    <div id="chat-row"><input type="text" id="chat-in" placeholder="Message..." onkeydown="if(event.key==='Enter')sendChat()"><button onclick="sendChat()">Send</button></div>
+  </div>
+  <div id="controls">
+    <button class="round" id="b-mic" onclick="toggleMic()">🎤</button>
+    <button class="round" id="b-cam" onclick="toggleCam()">📷</button>
+    <button class="round" onclick="flipCam()">🔄</button>
+    <button class="round" id="b-scr" onclick="shareScreen()">🖥️</button>
+    <button class="round" onclick="$('chat').classList.toggle('on')">💬</button>
+    <button class="round red" onclick="hangup()">📞</button>
+  </div>
+</div>
+
+<!-- INCOMING -->
+<div id="incoming">
+  <p class="status">Incoming video call</p>
+  <div class="av big pulse" id="i-av"></div>
+  <h1 id="i-name"></h1>
+  <div class="acts">
+    <button style="background:#dc2626" onclick="rejectCall()">✖</button>
+    <button style="background:#16a34a" onclick="acceptCall()">📞</button>
+  </div>
+</div>
+
+<script>
+/* TURN server yahan jodo (mobile data / strict wifi ke liye zaruri):
+   ,{urls:'turn:YOUR_HOST:3478', username:'USER', credential:'PASS'} */
+const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+const $ = id => document.getElementById(id);
+let S = null, ws = null, pc = null, local = null, facing = 'user', dc = null, partner = null;
+let callT = null, ringT = null, ringI = null, pendingICE = [], actx = null, inCall = false, logged = false, newAv = null, outgoing = false;
+try { S = JSON.parse(localStorage.getItem('vc_session')); } catch (e) {}
+
+document.addEventListener('click', () => {
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {}
+});
+if (/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent) || !navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) $('b-scr').style.display = 'none';
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+function setAv(el, u) {
+  const a = u && u.avatar && u.avatar.startsWith('data:image/') ? u.avatar : '';
+  el.style.backgroundImage = a ? 'url("' + a + '")' : '';
+  el.textContent = a ? '' : ((u && (u.display || u.username)) || '?')[0].toUpperCase();
+}
+
+/* ---------- Auth ---------- */
+async function auth(kind) {
+  $('auth-msg').textContent = '';
+  try {
+    const r = await fetch('/api/' + kind, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: $('a-user').value, password: $('a-pass').value })
+    });
+    const d = await r.json();
+    if (!r.ok) { $('auth-msg').textContent = '❌ ' + d.error; return; }
+    S = d; localStorage.setItem('vc_session', JSON.stringify(d)); enter();
+  } catch (e) { $('auth-msg').textContent = '❌ Server se connect nahi hua'; }
+}
+function enter() { connect(); setAv($('me-av'), S); $('me-name').textContent = S.display; show('s-menu'); }
+function logout() {
+  localStorage.removeItem('vc_session'); S = null;
+  if (ws) { ws.onclose = null; ws.close(); }
+  endLocal(true); show('s-auth');
+}
+
+/* ---------- Socket ---------- */
+function connect() {
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?token=' + S.token);
+  ws.onmessage = e => onMsg(JSON.parse(e.data));
+  ws.onclose = e => {
+    if (e.code === 4001) { logout(); return; }
+    if (e.code === 4002) { alert('Dusre device par login ho gaya'); logout(); return; }
+    if (S) setTimeout(connect, 2000);
+  };
+}
+const send = o => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
+
+function onMsg(d) {
+  if (d.t === 'results') renderResults(d.list);
+  else if (d.t === 'unavailable') { endLocal(); alert(d.why === 'busy' ? 'Wo abhi busy hai' : 'Wo abhi offline hai'); }
+  else if (d.t === 'incoming') onIncoming(d.from);
+  else if (d.t === 'accepted') startPC(true);
+  else if (d.t === 'rejected') { hist('out', true); endLocal(); alert('Call reject ho gayi'); }
+  else if (d.t === 'ended') { if (!logged) hist(outgoing ? 'out' : 'in', true); endLocal(); }
+  else if (d.t === 'signal') onSignal(d.data);
+}
+
+/* ---------- Search ---------- */
+let sT = null;
+function openSearch() { $('q').value = ''; show('s-search'); send({ t: 'search', q: '' }); }
+function doSearch() { clearTimeout(sT); sT = setTimeout(() => send({ t: 'search', q: $('q').value }), 250); }
+function renderResults(list) {
+  const box = $('results'); box.innerHTML = '';
+  if (!list.length) { const p = document.createElement('p'); p.className = 'status'; p.textContent = 'Koi user nahi mila'; box.appendChild(p); return; }
+  list.forEach(u => {
+    const row = document.createElement('div'); row.className = 'row';
+    const av = document.createElement('div'); av.className = 'av'; setAv(av, u);
+    const who = document.createElement('div'); who.className = 'who';
+    const b = document.createElement('b'); b.textContent = u.display;
+    const sm = document.createElement('small');
+    const dot = document.createElement('span'); dot.className = 'dot' + (u.online ? ' on' : '');
+    sm.appendChild(dot); sm.appendChild(document.createTextNode('@' + u.username + (u.online ? ' · online' : ' · offline')));
+    who.appendChild(b); who.appendChild(sm);
+    const btn = document.createElement('button'); btn.textContent = 'Call'; btn.disabled = !u.online;
+    btn.onclick = () => callUser(u);
+    row.append(av, who, btn); box.appendChild(row);
+  });
+}
+
+/* ---------- Media ---------- */
+async function getMedia() {
+  if (local) return local;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('Camera ke liye HTTPS chahiye');
+  local = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: true });
+  $('local').srcObject = local;
+  return local;
+}
+
+/* ---------- Calling ---------- */
+async function callUser(u) {
+  if (inCall) return;
+  try { await getMedia(); } catch (e) { alert(e.message); return; }
+  partner = u; inCall = true; logged = false; outgoing = true;
+  $('c-name').textContent = u.display; setAv($('c-av'), u); $('c-status').textContent = 'Ringing...';
+  show('s-calling');
+  send({ t: 'call', to: u.username });
+  callT = setTimeout(() => { hist('out', true); hangup(true); }, 30000);
+}
+function onIncoming(u) {
+  if (inCall) return;
+  partner = u; inCall = true; logged = false; outgoing = false;
+  $('i-name').textContent = u.display; setAv($('i-av'), u);
+  $('incoming').classList.add('on');
+  startRing();
+  ringT = setTimeout(rejectCall, 30000);
+}
+async function acceptCall() {
+  stopRing(); $('incoming').classList.remove('on');
+  try { await getMedia(); } catch (e) { alert(e.message); send({ t: 'reject' }); endLocal(); return; }
+  send({ t: 'accept' });
+  startPC(false);
+}
+function rejectCall() { send({ t: 'reject' }); hist('in', true); endLocal(); }
+function hangup(noHist) { send({ t: 'end' }); endLocal(); }
+
+function startPC(caller) {
+  pc = new RTCPeerConnection(ICE); pendingICE = [];
+  local.getTracks().forEach(t => pc.addTrack(t, local));
+  pc.onicecandidate = e => e.candidate && send({ t: 'signal', data: { ice: e.candidate } });
+  pc.ontrack = e => { $('remote').srcObject = e.streams[0]; showVideo(); };
+  pc.onconnectionstatechange = () => { if (pc && pc.connectionState === 'failed') hangup(); };
+  pc.ondatachannel = e => setDC(e.channel);
+  if (caller) {
+    setDC(pc.createDataChannel('chat'));
+    pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => send({ t: 'signal', data: { sdp: pc.localDescription } }));
+  }
+}
+async function onSignal(d) {
+  if (!pc) return;
+  try {
+    if (d.sdp) {
+      await pc.setRemoteDescription(d.sdp);
+      for (const c of pendingICE) await pc.addIceCandidate(c);
+      pendingICE = [];
+      if (d.sdp.type === 'offer') {
+        const a = await pc.createAnswer(); await pc.setLocalDescription(a);
+        send({ t: 'signal', data: { sdp: pc.localDescription } });
+      }
+    } else if (d.ice) {
+      if (pc.remoteDescription) await pc.addIceCandidate(d.ice); else pendingICE.push(d.ice);
+    }
+  } catch (e) {}
+}
+function showVideo() {
+  if (logged) return;
+  logged = true; clearTimeout(callT);
+  hist(outgoing ? 'out' : 'in', false);
+  $('name-tag').textContent = partner.display;
+  $('msgs').innerHTML = '';
+  show('s-video');
+  $('remote').play().catch(() => {});
+}
+function endLocal(silent) {
+  clearTimeout(callT); stopRing();
+  $('incoming').classList.remove('on'); $('chat').classList.remove('on');
+  if (dc) { try { dc.close(); } catch (e) {} dc = null; }
+  if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+  if (local) { local.getTracks().forEach(t => t.stop()); local = null; }
+  $('local').srcObject = null; $('remote').srcObject = null;
+  $('b-mic').classList.remove('off'); $('b-mic').textContent = '🎤'; $('b-cam').classList.remove('off');
+  inCall = false; partner = null; logged = true;
+  if (!silent && S) show('s-menu');
+}
+
+/* ---------- Controls ---------- */
+function toggleMic() {
+  const t = local && local.getAudioTracks()[0]; if (!t) return;
+  t.enabled = !t.enabled; $('b-mic').classList.toggle('off', !t.enabled); $('b-mic').textContent = t.enabled ? '🎤' : '🔇';
+}
+function toggleCam() {
+  const t = local && local.getVideoTracks()[0]; if (!t) return;
+  t.enabled = !t.enabled; $('b-cam').classList.toggle('off', !t.enabled);
+}
+async function flipCam() {
+  if (!local || !pc) return;
+  const next = facing === 'user' ? 'environment' : 'user';
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: next } });
+    const t = s.getVideoTracks()[0];
+    const snd = pc.getSenders().find(x => x.track && x.track.kind === 'video');
+    if (snd) await snd.replaceTrack(t);
+    local.getVideoTracks().forEach(x => { x.stop(); local.removeTrack(x); });
+    local.addTrack(t); $('local').srcObject = local;
+    facing = next; $('local').style.transform = facing === 'user' ? 'scaleX(-1)' : 'none';
+  } catch (e) { alert('Camera nahi badli'); }
+}
+async function shareScreen() {
+  if (!pc) return;
+  try {
+    const s = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const t = s.getVideoTracks()[0];
+    const snd = pc.getSenders().find(x => x.track && x.track.kind === 'video');
+    if (!snd) return;
+    const cam = snd.track;
+    await snd.replaceTrack(t);
+    t.onended = () => { if (pc) snd.replaceTrack(cam); };
+  } catch (e) {}
+}
+
+/* ---------- Chat ---------- */
+function setDC(c) { dc = c; c.onmessage = e => addMsg(e.data, false); }
+function addMsg(text, me) {
+  const d = document.createElement('div'); d.className = 'm ' + (me ? 'me' : 'them'); d.textContent = text;
+  $('msgs').appendChild(d); $('msgs').scrollTop = 1e9;
+  if (!me) $('chat').classList.add('on');
+}
+function sendChat() {
+  const v = $('chat-in').value.trim();
+  if (!v || !dc || dc.readyState !== 'open') return;
+  dc.send(v); addMsg(v, true); $('chat-in').value = '';
+}
+
+/* ---------- Ringtone ---------- */
+function startRing() {
+  stopRing();
+  const beep = () => {
+    if (!actx) return;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = 820; g.gain.value = .2; o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + .4);
+  };
+  beep();
+  ringI = setInterval(() => { beep(); if (navigator.vibrate) navigator.vibrate([400, 200, 400]); }, 1500);
+}
+function stopRing() { clearInterval(ringI); clearTimeout(ringT); if (navigator.vibrate) navigator.vibrate(0); }
+
+/* ---------- Profile + History ---------- */
+function openProfile() {
+  newAv = null;
+  $('p-name').value = S.display; $('p-user').textContent = '@' + S.username; $('p-msg').textContent = '';
+  setAv($('p-av'), S); renderHist(); show('s-profile');
+}
+function pickAv(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const s = Math.min(img.width, img.height);
+    c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 128, 128);
+    newAv = c.toDataURL('image/jpeg', .7); setAv($('p-av'), { avatar: newAv, display: S.display });
+  };
+  img.src = URL.createObjectURL(f);
+}
+function saveProfile() {
+  S.display = $('p-name').value.trim() || S.username;
+  if (newAv !== null) S.avatar = newAv;
+  localStorage.setItem('vc_session', JSON.stringify(S));
+  send({ t: 'profile', display: S.display, avatar: S.avatar });
+  setAv($('me-av'), S); $('me-name').textContent = S.display;
+  $('p-msg').textContent = 'Save ho gaya ✅';
+}
+function hist(dir, missed) {
+  if (!S || !partner) return;
+  const k = 'vc_h_' + S.username;
+  let h = []; try { h = JSON.parse(localStorage.getItem(k)) || []; } catch (e) {}
+  h.unshift({ n: partner.display, d: dir, m: missed, t: Date.now() });
+  localStorage.setItem(k, JSON.stringify(h.slice(0, 30)));
+}
+function renderHist() {
+  const box = $('hist'); box.innerHTML = '';
+  let h = []; try { h = JSON.parse(localStorage.getItem('vc_h_' + S.username)) || []; } catch (e) {}
+  if (!h.length) { box.textContent = 'Abhi koi call nahi'; return; }
+  h.forEach(x => {
+    const d = document.createElement('div'); if (x.m) d.className = 'miss';
+    d.textContent = (x.d === 'out' ? '↗ ' : '↙ ') + x.n + (x.m ? ' (missed)' : '') + ' · ' + new Date(x.t).toLocaleString();
+    box.appendChild(d);
+  });
+}
+
+if (S && S.token) enter(); else show('s-auth');
+</script>
+</body>
+</html>
